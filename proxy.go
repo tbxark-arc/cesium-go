@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/dgraph-io/badger/v4"
 	"io"
@@ -13,11 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-type CacheEntry struct {
-	Headers http.Header `json:"headers"`
-	Body    []byte      `json:"body"`
-}
 
 func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *httputil.ReverseProxy) (*http.Server, error) {
 
@@ -44,29 +38,15 @@ func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *http
 				return
 			}
 			if r.Method == http.MethodGet {
-				err := cache.View(func(txn *badger.Txn) error {
-					item, err := txn.Get([]byte(key))
-					if err != nil {
-						return err
-					}
-					var entry CacheEntry
-					err = item.Value(func(val []byte) error {
-						return json.Unmarshal(val, &entry)
-					})
-					log.Printf("cache hit: %s", key)
-					if err != nil {
-						return err
-					}
-					for k, v := range entry.Headers {
+				if entry, err := loadCache(cache, key); err == nil {
+					log.Printf("load cache %s", key)
+					for k, v := range entry.Header {
 						for _, vv := range v {
 							w.Header().Add(k, vv)
 						}
 					}
-					w.WriteHeader(http.StatusOK)
+					w.Header().Set("Content-Length", fmt.Sprintf("%d", len(entry.Body)))
 					_, _ = w.Write(entry.Body)
-					return nil
-				})
-				if err == nil {
 					return
 				}
 			}
@@ -79,10 +59,7 @@ func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *http
 }
 
 func newReverseProxyWithCache(keys []string, cache *badger.DB) (*httputil.ReverseProxy, error) {
-	target, err := url.Parse("https://tile.googleapis.com/")
-	if err != nil {
-		return nil, err
-	}
+	target, _ := url.Parse("https://tile.googleapis.com/")
 	index := atomic.Int64{}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := proxy.Director
@@ -97,6 +74,12 @@ func newReverseProxyWithCache(keys []string, cache *badger.DB) (*httputil.Revers
 		}
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		if resp.StatusCode != http.StatusOK {
+			return nil
+		}
+		if resp.Request.Method != http.MethodGet {
+			return nil
+		}
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
@@ -105,25 +88,17 @@ func newReverseProxyWithCache(keys []string, cache *badger.DB) (*httputil.Revers
 		resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		resp.ContentLength = int64(len(bodyBytes))
 		resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
-		if resp.StatusCode == http.StatusOK {
-			entry := CacheEntry{
-				Headers: http.Header{},
-				Body:    bodyBytes,
-			}
-			for k, v := range resp.Header {
-				for _, vv := range v {
-					entry.Headers.Add(k, vv)
-				}
-			}
-			_ = cache.Update(func(txn *badger.Txn) error {
-				raw, err := json.Marshal(entry)
-				if err != nil {
-					return err
-				}
-				return txn.Set([]byte(resp.Request.URL.Path), raw)
-			})
-
+		entry := &CacheEntry{
+			Header: resp.Header.Clone(),
+			Body:   bodyBytes,
 		}
+		key := resp.Request.URL.Path
+		err = saveCache(cache, key, entry)
+		if err != nil {
+			log.Printf("save cache error: %v", err)
+			return nil
+		}
+		log.Printf("save cache %s", key)
 		return nil
 	}
 	return proxy, nil
