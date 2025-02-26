@@ -16,26 +16,18 @@ const (
 	CacheTypeKeyBody   = "body"
 )
 
-func cacheKeys(t, uri string) ([]byte, error) {
-	return json.Marshal([]string{t, uri})
+func cacheKeys(key, uri string) ([]byte, error) {
+	return json.Marshal([]string{key, uri})
 }
 
 func loadCache(db *badger.DB, uri string) (*CacheEntry, error) {
 	var entry CacheEntry
 	err := db.View(func(txn *badger.Txn) error {
-		headerKey, err := cacheKeys(CacheTypeKeyHeader, uri)
+		headerRaw, err := loadCacheRaw(txn, CacheTypeKeyHeader, uri)
 		if err != nil {
 			return err
 		}
-		headerRaw, err := txn.Get(headerKey)
-		if err != nil {
-			return err
-		}
-		bodyKey, err := cacheKeys(CacheTypeKeyBody, uri)
-		if err != nil {
-			return err
-		}
-		bodyRaw, err := txn.Get(bodyKey)
+		bodyRaw, err := loadCacheRaw(txn, CacheTypeKeyBody, uri)
 		if err != nil {
 			return err
 		}
@@ -45,13 +37,11 @@ func loadCache(db *badger.DB, uri string) (*CacheEntry, error) {
 		if err != nil {
 			return err
 		}
-		err = bodyRaw.Value(func(val []byte) error {
-			entry.Body = val
-			return nil
-		})
+		body, err := bodyRaw.ValueCopy(entry.Body)
 		if err != nil {
 			return err
 		}
+		entry.Body = body
 		return nil
 	})
 	return &entry, err
@@ -59,26 +49,42 @@ func loadCache(db *badger.DB, uri string) (*CacheEntry, error) {
 
 func saveCache(db *badger.DB, uri string, entry *CacheEntry) error {
 	return db.Update(func(txn *badger.Txn) error {
-		headerKey, err := cacheKeys(CacheTypeKeyHeader, uri)
-		if err != nil {
-			return err
-		}
 		headerRaw, err := json.Marshal(entry.Header)
 		if err != nil {
 			return err
 		}
-		err = txn.Set(headerKey, headerRaw)
+		err = setCacheRaw(txn, CacheTypeKeyHeader, uri, headerRaw)
 		if err != nil {
 			return err
 		}
-		bodyKey, err := cacheKeys(CacheTypeKeyBody, uri)
-		if err != nil {
-			return err
-		}
-		err = txn.Set(bodyKey, entry.Body)
+		err = setCacheRaw(txn, CacheTypeKeyBody, uri, entry.Body)
 		if err != nil {
 			return err
 		}
 		return nil
 	})
+}
+
+func loadCacheRaw(txn *badger.Txn, key, uri string) (*badger.Item, error) {
+	headerKey, err := cacheKeys(key, uri)
+	if err != nil {
+		return nil, err
+	}
+	headerRaw, err := txn.Get(headerKey)
+	if err != nil {
+		return nil, err
+	}
+	return headerRaw, nil
+}
+
+func setCacheRaw(txn *badger.Txn, key, uri string, value []byte) error {
+	headerKey, err := cacheKeys(key, uri)
+	if err != nil {
+		return err
+	}
+	err = txn.Set(headerKey, value)
+	if err != nil {
+		return err
+	}
+	return nil
 }
