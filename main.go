@@ -7,6 +7,9 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 type Config struct {
@@ -54,6 +57,19 @@ func (p *Application) Stop() error {
 	)
 }
 
+func onsShutdown(closer ...func() error) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+	log.Printf("Receive close signal")
+	for _, c := range closer {
+		err := c()
+		if err != nil {
+			log.Printf("close error: %v", err)
+		}
+	}
+}
+
 func main() {
 	conf := flag.String("config", "config.json", "Config file path")
 	flag.Parse()
@@ -65,6 +81,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	go onsShutdown(proxy.Stop)
 	err = proxy.Start()
 	if err != nil {
 		log.Fatal(err)

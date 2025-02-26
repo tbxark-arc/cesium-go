@@ -1,6 +1,6 @@
 module github.com/tbxark-arc/cesium-go
 
-go 1.24
+go 1.23
 
 require (
 	github.com/TBXark/confstore v0.0.0-20250213133642-966f3d3fb351
