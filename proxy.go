@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cesium-go/assets"
 	"encoding/json"
 	"fmt"
 	"github.com/dgraph-io/badger/v4"
@@ -18,22 +17,6 @@ import (
 type CacheEntry struct {
 	Headers http.Header `json:"headers"`
 	Body    []byte      `json:"body"`
-}
-
-type customResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-	buffer     bytes.Buffer
-}
-
-func (w *customResponseWriter) Write(b []byte) (int, error) {
-	w.buffer.Write(b)
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *customResponseWriter) WriteHeader(statusCode int) {
-	w.statusCode = statusCode
-	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *httputil.ReverseProxy) (*http.Server, error) {
@@ -57,7 +40,7 @@ func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *http
 			key := r.URL.Path
 			if _, ok := indexPath[key]; ok {
 				w.Header().Set("Content-Type", "text/html")
-				_, _ = w.Write(assets.IndexHTML)
+				_, _ = w.Write(IndexHTML)
 				return
 			}
 			if r.Method == http.MethodGet {

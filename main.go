@@ -43,6 +43,7 @@ func NewApplication(config *Config) (*Application, error) {
 }
 
 func (p *Application) Start() error {
+	log.Printf("Starting server on %s", p.config.Address)
 	return p.server.ListenAndServe()
 }
 
@@ -54,7 +55,7 @@ func (p *Application) Stop() error {
 }
 
 func main() {
-	conf := flag.String("config", "", "Config file path")
+	conf := flag.String("config", "config.json", "Config file path")
 	flag.Parse()
 	config, err := confstore.Load[Config](*conf)
 	if err != nil {

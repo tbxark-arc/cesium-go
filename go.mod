@@ -1,4 +1,4 @@
-module cesium-go
+module github.com/tbxark-arc/cesium-go
 
 go 1.24
 
