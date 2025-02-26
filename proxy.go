@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/dgraph-io/badger/v4"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"net/url"
 	"sync/atomic"
 	"time"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *httputil.ReverseProxy) (*http.Server, error) {
@@ -60,14 +61,14 @@ func newHttpServerWithReverseProxy(address string, cache *badger.DB, proxy *http
 
 func newReverseProxyWithCache(keys []string, cache *badger.DB) (*httputil.ReverseProxy, error) {
 	target, _ := url.Parse("https://tile.googleapis.com/")
-	index := atomic.Int64{}
+	index := atomic.Uint64{}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Host = target.Host
 		if len(keys) > 0 {
-			key := keys[index.Add(1)%int64(len(keys))]
+			key := keys[index.Add(1)%uint64(len(keys))]
 			query := req.URL.Query()
 			query.Set("key", key)
 			req.URL.RawQuery = query.Encode()
