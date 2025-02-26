@@ -1,0 +1,23 @@
+<head>
+    <meta charset="utf-8">
+    <script src="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/cesium/1.90.0/Cesium.js"></script>
+    <link href="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/cesium/1.90.0/Widgets/widgets.css" rel="stylesheet">
+</head>
+
+<body>
+  <div id="cesiumContainer"></div>
+  <script>
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: false,
+      baseLayerPicker: false,
+      requestRenderMode: true,
+    });
+    const urlbase = new URL(window.location.href);
+    const url = urlbase.protocol + "//" + urlbase.host;
+    const tileset = viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
+      url: url + "/v1/3dtiles/root.json",
+      showCreditsOnScreen: true,
+    }));
+    viewer.scene.globe.show = false;
+  </script>
+</body>
