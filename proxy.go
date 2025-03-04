@@ -67,6 +67,7 @@ func newReverseProxyWithCache(keys []string, cache *badger.DB) (*httputil.Revers
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Host = target.Host
+		req.Header.Del("Accept-Encoding")
 		if len(keys) > 0 {
 			key := keys[index.Add(1)%uint64(len(keys))]
 			query := req.URL.Query()
